@@ -61,10 +61,11 @@ func (s *Store) Create(ctx context.Context, sku string, checks []string) (Review
 		if strings.TrimSpace(name) == "" {
 			return Review{}, fmt.Errorf("%w: checks cannot be blank", ErrInvalidInput)
 		}
-		if _, exists := seen[name]; exists {
+		key := strings.TrimSpace(name)
+		if _, exists := seen[key]; exists {
 			return Review{}, fmt.Errorf("%w: duplicate check %q", ErrInvalidInput, name)
 		}
-		seen[name] = struct{}{}
+		seen[key] = struct{}{}
 		copyChecks[i] = storedCheck{name: name}
 	}
 
