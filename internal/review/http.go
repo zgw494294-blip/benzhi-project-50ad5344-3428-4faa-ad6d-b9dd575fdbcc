@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -36,7 +37,12 @@ type errorResponse struct {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/reviews" {
+	// Route against the escaped path so that a check name containing "/" (for
+	// example "nutrition/allergens") survives as a single path segment when it
+	// is correctly percent-encoded as "nutrition%2Fallergens". Decoded values
+	// for user-supplied segments are unescaped below before being used.
+	escapedPath := r.URL.EscapedPath()
+	if escapedPath == "/reviews" {
 		if r.Method != http.MethodPost {
 			writeMethodError(w, http.MethodPost)
 			return
@@ -46,17 +52,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	const prefix = "/reviews/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	if !strings.HasPrefix(escapedPath, prefix) {
 		writeError(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(strings.TrimPrefix(escapedPath, prefix), "/")
 	if len(parts) == 1 && parts[0] != "" {
 		if r.Method != http.MethodGet {
 			writeMethodError(w, http.MethodGet)
 			return
 		}
-		h.get(w, parts[0])
+		id, err := url.PathUnescape(parts[0])
+		if err != nil {
+			writeError(w, http.StatusNotFound, ErrNotFound)
+			return
+		}
+		h.get(w, id)
 		return
 	}
 	if len(parts) == 2 && parts[0] != "" && parts[1] == "finalize" {
@@ -64,7 +75,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeMethodError(w, http.MethodPost)
 			return
 		}
-		h.finalize(w, r, parts[0])
+		id, err := url.PathUnescape(parts[0])
+		if err != nil {
+			writeError(w, http.StatusNotFound, ErrNotFound)
+			return
+		}
+		h.finalize(w, r, id)
 		return
 	}
 	if len(parts) == 3 && parts[0] != "" && parts[1] == "checks" && parts[2] != "" {
@@ -72,7 +88,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeMethodError(w, http.MethodPost)
 			return
 		}
-		h.verdict(w, r, parts[0], parts[2])
+		id, err := url.PathUnescape(parts[0])
+		if err != nil {
+			writeError(w, http.StatusNotFound, ErrNotFound)
+			return
+		}
+		checkName, err := url.PathUnescape(parts[2])
+		if err != nil {
+			writeError(w, http.StatusNotFound, ErrNotFound)
+			return
+		}
+		h.verdict(w, r, id, checkName)
 		return
 	}
 	writeError(w, http.StatusNotFound, ErrNotFound)
