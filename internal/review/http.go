@@ -138,6 +138,9 @@ func decodeJSON(r *http.Request, destination any) error {
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return fmt.Errorf("%w: request body must be a JSON object", ErrInvalidInput)
 	}
+	if err := rejectDuplicateMembers(trimmed); err != nil {
+		return fmt.Errorf("decode request: %w", err)
+	}
 	strict := json.NewDecoder(bytes.NewReader(trimmed))
 	strict.DisallowUnknownFields()
 	if err := strict.Decode(destination); err != nil {
@@ -151,6 +154,51 @@ func decodeJSON(r *http.Request, destination any) error {
 		return fmt.Errorf("decode request: %w", err)
 	}
 	return nil
+}
+
+func rejectDuplicateMembers(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	return scanJSONValue(decoder)
+}
+
+func scanJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delimiter {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key := keyToken.(string)
+			if _, exists := seen[key]; exists {
+				return fmt.Errorf("%w: duplicate JSON member %q", ErrInvalidInput, key)
+			}
+			seen[key] = struct{}{}
+			if err := scanJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	case '[':
+		for decoder.More() {
+			if err := scanJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = decoder.Token()
+	return err
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {
