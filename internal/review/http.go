@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -36,7 +37,8 @@ type errorResponse struct {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/reviews" {
+	path := r.URL.EscapedPath()
+	if path == "/reviews" {
 		if r.Method != http.MethodPost {
 			writeMethodError(w, http.MethodPost)
 			return
@@ -46,11 +48,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	const prefix = "/reviews/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	if !strings.HasPrefix(path, prefix) {
 		writeError(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
 	if len(parts) == 1 && parts[0] != "" {
 		if r.Method != http.MethodGet {
 			writeMethodError(w, http.MethodGet)
@@ -72,7 +74,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeMethodError(w, http.MethodPost)
 			return
 		}
-		h.verdict(w, r, parts[0], parts[2])
+		checkName, err := url.PathUnescape(parts[2])
+		if err != nil {
+			writeError(w, http.StatusNotFound, ErrNotFound)
+			return
+		}
+		h.verdict(w, r, parts[0], checkName)
 		return
 	}
 	writeError(w, http.StatusNotFound, ErrNotFound)
