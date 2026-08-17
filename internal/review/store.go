@@ -152,8 +152,8 @@ func (s *Store) Finalize(ctx context.Context, id string) (Review, error) {
 		}
 	}
 	completedAt := time.Now().UTC()
+	record.completedAt = &completedAt
 	if allPassed {
-		record.completedAt = &completedAt
 		record.status = StatusApproved
 	} else {
 		record.status = StatusBlocked
