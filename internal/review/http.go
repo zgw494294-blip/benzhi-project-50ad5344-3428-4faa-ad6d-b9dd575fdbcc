@@ -111,7 +111,7 @@ func (h *Handler) verdict(w http.ResponseWriter, r *http.Request, id, checkName 
 }
 
 func (h *Handler) finalize(w http.ResponseWriter, r *http.Request, id string) {
-	record, err := h.store.Finalize(context.Background(), id)
+	record, err := h.store.Finalize(r.Context(), id)
 	if err != nil {
 		writeStoreError(w, err)
 		return
